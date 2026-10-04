@@ -1,0 +1,5 @@
+export * from './AssessmentsPage'
+export * from './AssessmentDetailsPage'
+export * from './HackerRankAssessmentPage'
+export * from './McqPlayerPage'
+export { default } from './AssessmentsPage'
