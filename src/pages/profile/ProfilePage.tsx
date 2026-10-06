@@ -19,9 +19,7 @@ export function ProfileView({
   const [personalEditing, setPersonalEditing] = useState(false)
   const [collegeEditing, setCollegeEditing] = useState(false)
   const [savedCard, setSavedCard] = useState<'personal' | 'college' | null>(null)
-  const [photoUrl, setPhotoUrl] = useState<string>(() => {
-    return localStorage.getItem('dudex_profile_photo') || ''
-  })
+  const [photoUrl, setPhotoUrl] = useState<string>(profile.avatar || '')
 
   const getProfileInitials = (name: string) => {
     const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -33,8 +31,8 @@ export function ProfileView({
   const profileInitials = getProfileInitials(formData.full_name)
 
   const removeProfilePhoto = () => {
-    localStorage.removeItem('dudex_profile_photo')
     setPhotoUrl('')
+    onSave({ ...formData, avatar: '' })
 
     const input = document.getElementById('profile-photo-upload') as HTMLInputElement | null
     if (input) input.value = ''
@@ -47,7 +45,7 @@ export function ProfileView({
 
   const handlePersonalSave = (e: React.FormEvent) => {
     e.preventDefault()
-    onSave(formData)
+    onSave({ ...formData, avatar: photoUrl })
     setPersonalEditing(false)
     showSaved('personal')
   }
@@ -82,12 +80,8 @@ export function ProfileView({
     reader.onload = () => {
       const result = typeof reader.result === 'string' ? reader.result : ''
       if (result) {
-        try {
-          localStorage.setItem('dudex_profile_photo', result)
-          setPhotoUrl(result)
-        } catch {
-          alert('This image is too large to save in the browser. Please choose a smaller image.')
-        }
+        setPhotoUrl(result)
+        onSave({ ...formData, avatar: result })
       }
     }
     reader.readAsDataURL(file)

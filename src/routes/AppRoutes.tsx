@@ -1,6 +1,6 @@
 import React from 'react'
 import type { View, StudentProfile, RegistrationDetails, DailyNote, PortalNotification } from '../types'
-import { studentService } from '../services'
+import { studentService, authService } from '../services'
 
 import { DashboardView } from '../pages/dashboard'
 import { LiveClassesView } from '../pages/live-classes'
@@ -93,7 +93,7 @@ export function AppRoutes({
           onSave={(p) => setProfile(studentService.saveProfile(p))}
           onRegistrationSave={(details) => {
             setRegistrationDetails(details)
-            localStorage.setItem('dudex_registration_details', JSON.stringify(details))
+            authService.saveRegistrationDetails(details)
           }}
         />
       )}

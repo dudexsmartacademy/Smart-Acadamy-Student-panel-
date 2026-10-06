@@ -37,18 +37,24 @@ export const defaultStudentProfile: StudentProfile = {
   career_interest: '',
 }
 
+// In-Memory Data State (No localStorage reliance)
+let cachedProfile: StudentProfile = defaultStudentProfile
+let cachedLiveClasses: LiveClass[] = []
+let cachedDailyNotes: DailyNote[] = []
+let cachedAttendanceRecords: AttendanceRecord[] = []
+let cachedSubjectAttendance: SubjectAttendance[] = []
+let cachedCorrectionRequests: AttendanceCorrectionRequest[] = []
+let cachedAssessments: Assessment[] = []
+let cachedMcqQuestions: McqQuestion[] = []
+let cachedCodingProblems: CodingProblem[] = []
+let cachedResults: ResultRecord[] = []
+let cachedAnnouncements: AnnouncementItem[] = []
+let cachedNotifications: NotificationItem[] = []
+
 export const studentService = {
   // --- Profile ---
   getProfile(): StudentProfile {
-    const stored = localStorage.getItem('dudex_student_profile')
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        // fallback
-      }
-    }
-    return defaultStudentProfile
+    return cachedProfile
   },
 
   async fetchProfileAsync(userId?: string): Promise<StudentProfile> {
@@ -57,7 +63,7 @@ export const studentService = {
         const { data: { user } } = await supabase.auth.getUser()
         userId = user?.id
       }
-      if (!userId) return this.getProfile()
+      if (!userId) return cachedProfile
 
       const { data, error } = await supabase
         .from('student_profiles')
@@ -65,7 +71,7 @@ export const studentService = {
         .eq('user_id', userId)
         .single()
 
-      if (error || !data) return this.getProfile()
+      if (error || !data) return cachedProfile
 
       const profile: StudentProfile = {
         student_id: data.student_id || data.id || 'STU-001',
@@ -95,51 +101,40 @@ export const studentService = {
         career_interest: data.career_interest || '',
       }
 
-      this.saveProfile(profile)
+      cachedProfile = profile
       return profile
     } catch {
-      return this.getProfile()
+      return cachedProfile
     }
   },
 
   saveProfile(profile: Partial<StudentProfile>): StudentProfile {
-    const current = this.getProfile()
-    const updated = { ...current, ...profile }
-    localStorage.setItem('dudex_student_profile', JSON.stringify(updated))
+    cachedProfile = { ...cachedProfile, ...profile }
 
-    // Async push to Supabase if available
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         supabase.from('student_profiles').upsert({
           user_id: user.id,
-          full_name: updated.full_name,
-          dob: updated.dob,
-          gender: updated.gender,
-          whatsapp: updated.whatsapp,
-          address: updated.address,
-          github: updated.github,
-          linkedin: updated.linkedin,
-          portfolio: updated.portfolio,
-          skills: updated.skills,
-          career_interest: updated.career_interest,
+          full_name: cachedProfile.full_name,
+          dob: cachedProfile.dob,
+          gender: cachedProfile.gender,
+          whatsapp: cachedProfile.whatsapp,
+          address: cachedProfile.address,
+          github: cachedProfile.github,
+          linkedin: cachedProfile.linkedin,
+          portfolio: cachedProfile.portfolio,
+          skills: cachedProfile.skills,
+          career_interest: cachedProfile.career_interest,
         }).then()
       }
     })
 
-    return updated
+    return cachedProfile
   },
 
-  // --- Live Classes ---
+  // --- Live Classes (Connected to Teacher / Admin Panel table `live_classes`) ---
   getLiveClasses(): LiveClass[] {
-    const stored = localStorage.getItem('dudex_live_classes')
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        // fallback
-      }
-    }
-    return []
+    return cachedLiveClasses
   },
 
   async fetchLiveClassesAsync(): Promise<LiveClass[]> {
@@ -149,7 +144,7 @@ export const studentService = {
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (error || !data) return this.getLiveClasses()
+      if (error || !data) return cachedLiveClasses
 
       const formatted: LiveClass[] = data.map((item) => ({
         live_class_id: item.id || item.live_class_id,
@@ -169,29 +164,20 @@ export const studentService = {
         is_hero: item.is_hero || false,
       }))
 
-      localStorage.setItem('dudex_live_classes', JSON.stringify(formatted))
+      cachedLiveClasses = formatted
       return formatted
     } catch {
-      return this.getLiveClasses()
+      return cachedLiveClasses
     }
   },
 
   getHeroLiveClass(): LiveClass | undefined {
-    const classes = this.getLiveClasses()
-    return classes.find((c) => c.status === 'Live Now') || classes[0]
+    return cachedLiveClasses.find((c) => c.status === 'Live Now') || cachedLiveClasses[0]
   },
 
-  // --- Daily Notes / Materials ---
+  // --- Daily Notes / Materials (Connected to Teacher Panel table `notes`) ---
   getDailyNotes(): DailyNote[] {
-    const stored = localStorage.getItem('dudex_daily_notes')
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        // fallback
-      }
-    }
-    return []
+    return cachedDailyNotes
   },
 
   async fetchDailyNotesAsync(): Promise<DailyNote[]> {
@@ -201,7 +187,7 @@ export const studentService = {
         .select('*, note_attachments(*)')
         .order('created_at', { ascending: false })
 
-      if (error || !data) return this.getDailyNotes()
+      if (error || !data) return cachedDailyNotes
 
       const formatted: DailyNote[] = data.map((item) => ({
         note_id: item.id || item.note_id,
@@ -219,51 +205,39 @@ export const studentService = {
         tags: item.tags || [item.subject],
       }))
 
-      localStorage.setItem('dudex_daily_notes', JSON.stringify(formatted))
+      cachedDailyNotes = formatted
       return formatted
     } catch {
-      return this.getDailyNotes()
+      return cachedDailyNotes
     }
   },
 
   getNoteById(id: string): DailyNote | undefined {
-    return this.getDailyNotes().find((n) => n.note_id === id)
+    return cachedDailyNotes.find((n) => n.note_id === id)
   },
 
-  // --- Attendance ---
+  // --- Attendance (Connected to Teacher Panel table `attendance_records`) ---
   getSubjectAttendance(): SubjectAttendance[] {
-    const stored = localStorage.getItem('dudex_subject_attendance')
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        // fallback
-      }
-    }
-    return []
+    return cachedSubjectAttendance
   },
 
   getAttendanceRecords(): AttendanceRecord[] {
-    const stored = localStorage.getItem('dudex_attendance_records')
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        // fallback
-      }
-    }
-    return []
+    return cachedAttendanceRecords
   },
 
   async fetchAttendanceAsync(): Promise<{ records: AttendanceRecord[]; summary: SubjectAttendance[] }> {
     try {
-      const { data, error } = await supabase
-        .from('attendance_records')
-        .select('*')
-        .order('date', { ascending: false })
+      const { data: { user } } = await supabase.auth.getUser()
+
+      let query = supabase.from('attendance_records').select('*').order('date', { ascending: false })
+      if (user) {
+        query = query.eq('student_id', user.id)
+      }
+
+      const { data, error } = await query
 
       if (error || !data) {
-        return { records: this.getAttendanceRecords(), summary: this.getSubjectAttendance() }
+        return { records: cachedAttendanceRecords, summary: cachedSubjectAttendance }
       }
 
       const records: AttendanceRecord[] = data.map((item) => ({
@@ -277,7 +251,6 @@ export const studentService = {
         mode: item.mode || 'Online',
       }))
 
-      // Calculate subject attendance summary
       const subjectMap: Record<string, { conducted: number; present: number; absent: number }> = {}
       records.forEach((r) => {
         if (!subjectMap[r.subject]) {
@@ -304,61 +277,48 @@ export const studentService = {
         }
       })
 
-      localStorage.setItem('dudex_attendance_records', JSON.stringify(records))
-      localStorage.setItem('dudex_subject_attendance', JSON.stringify(summary))
+      cachedAttendanceRecords = records
+      cachedSubjectAttendance = summary
       return { records, summary }
     } catch {
-      return { records: this.getAttendanceRecords(), summary: this.getSubjectAttendance() }
+      return { records: cachedAttendanceRecords, summary: cachedSubjectAttendance }
     }
   },
 
   getCorrectionRequests(): AttendanceCorrectionRequest[] {
-    const stored = localStorage.getItem('dudex_correction_requests')
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        // fallback
-      }
-    }
-    return []
+    return cachedCorrectionRequests
   },
 
   submitCorrectionRequest(req: Omit<AttendanceCorrectionRequest, 'request_id' | 'status' | 'submitted_at'>): AttendanceCorrectionRequest {
-    const list = this.getCorrectionRequests()
     const newReq: AttendanceCorrectionRequest = {
       ...req,
       request_id: `cr_${Date.now()}`,
       status: 'Pending',
       submitted_at: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
     }
-    const updated = [newReq, ...list]
-    localStorage.setItem('dudex_correction_requests', JSON.stringify(updated))
 
-    // Sync to Supabase table if accessible
-    supabase.from('attendance_correction_requests').insert({
-      session_date: req.session_date,
-      subject: req.subject,
-      current_status: req.current_status,
-      requested_status: req.requested_status,
-      reason: req.reason,
-      status: 'Pending',
-    }).then()
+    cachedCorrectionRequests = [newReq, ...cachedCorrectionRequests]
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        supabase.from('attendance_correction_requests').insert({
+          student_id: user.id,
+          session_date: req.session_date,
+          subject: req.subject,
+          current_status: req.current_status,
+          requested_status: req.requested_status,
+          reason: req.reason,
+          status: 'Pending',
+        }).then()
+      }
+    })
 
     return newReq
   },
 
-  // --- Assessments ---
+  // --- Assessments (Connected to Teacher / Admin Panel table `assessments`) ---
   getAssessments(): Assessment[] {
-    const stored = localStorage.getItem('dudex_assessments')
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        // fallback
-      }
-    }
-    return []
+    return cachedAssessments
   },
 
   async fetchAssessmentsAsync(): Promise<Assessment[]> {
@@ -368,7 +328,7 @@ export const studentService = {
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (error || !data) return this.getAssessments()
+      if (error || !data) return cachedAssessments
 
       const formatted: Assessment[] = data.map((item) => ({
         assessment_id: item.id || item.assessment_id,
@@ -389,67 +349,46 @@ export const studentService = {
         grade: item.grade,
       }))
 
-      localStorage.setItem('dudex_assessments', JSON.stringify(formatted))
+      cachedAssessments = formatted
       return formatted
     } catch {
-      return this.getAssessments()
+      return cachedAssessments
     }
   },
 
   getAssessmentById(id: string): Assessment | undefined {
-    return this.getAssessments().find((a) => a.assessment_id === id)
+    return cachedAssessments.find((a) => a.assessment_id === id)
   },
 
   getMcqQuestions(): McqQuestion[] {
-    const stored = localStorage.getItem('dudex_mcq_questions')
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        // fallback
-      }
-    }
-    return []
+    return cachedMcqQuestions
   },
 
   getCodingProblems(): CodingProblem[] {
-    const stored = localStorage.getItem('dudex_coding_problems')
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        // fallback
-      }
-    }
-    return []
+    return cachedCodingProblems
   },
 
   getCodingProblem(): CodingProblem | undefined {
-    const problems = this.getCodingProblems()
-    return problems[0]
+    return cachedCodingProblems[0]
   },
 
-  // --- Results ---
+  // --- Results (Connected to Teacher Panel table `results`) ---
   getResults(): ResultRecord[] {
-    const stored = localStorage.getItem('dudex_results')
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        // fallback
-      }
-    }
-    return []
+    return cachedResults
   },
 
   async fetchResultsAsync(): Promise<ResultRecord[]> {
     try {
-      const { data, error } = await supabase
-        .from('results')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const { data: { user } } = await supabase.auth.getUser()
 
-      if (error || !data) return this.getResults()
+      let query = supabase.from('results').select('*').order('created_at', { ascending: false })
+      if (user) {
+        query = query.eq('student_id', user.id)
+      }
+
+      const { data, error } = await query
+
+      if (error || !data) return cachedResults
 
       const formatted: ResultRecord[] = data.map((item) => ({
         result_id: item.id || item.result_id,
@@ -469,24 +408,16 @@ export const studentService = {
         feedback: item.feedback,
       }))
 
-      localStorage.setItem('dudex_results', JSON.stringify(formatted))
+      cachedResults = formatted
       return formatted
     } catch {
-      return this.getResults()
+      return cachedResults
     }
   },
 
-  // --- Announcements & Notifications ---
+  // --- Announcements & Notifications (Connected to Admin Panel tables) ---
   getAnnouncements(): AnnouncementItem[] {
-    const stored = localStorage.getItem('dudex_announcements')
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        // fallback
-      }
-    }
-    return []
+    return cachedAnnouncements
   },
 
   async fetchAnnouncementsAsync(): Promise<AnnouncementItem[]> {
@@ -496,7 +427,7 @@ export const studentService = {
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (error || !data) return this.getAnnouncements()
+      if (error || !data) return cachedAnnouncements
 
       const formatted: AnnouncementItem[] = data.map((item) => ({
         announcement_id: item.id || item.announcement_id,
@@ -509,33 +440,29 @@ export const studentService = {
         target_class: item.target_class || 'All Students',
       }))
 
-      localStorage.setItem('dudex_announcements', JSON.stringify(formatted))
+      cachedAnnouncements = formatted
       return formatted
     } catch {
-      return this.getAnnouncements()
+      return cachedAnnouncements
     }
   },
 
   getNotifications(): NotificationItem[] {
-    const stored = localStorage.getItem('dudex_notifications')
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        // fallback
-      }
-    }
-    return []
+    return cachedNotifications
   },
 
   async fetchNotificationsAsync(): Promise<NotificationItem[]> {
     try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const { data: { user } } = await supabase.auth.getUser()
 
-      if (error || !data) return this.getNotifications()
+      let query = supabase.from('notifications').select('*').order('created_at', { ascending: false })
+      if (user) {
+        query = query.eq('user_id', user.id)
+      }
+
+      const { data, error } = await query
+
+      if (error || !data) return cachedNotifications
 
       const formatted: NotificationItem[] = data.map((item) => ({
         notification_id: item.id || item.notification_id,
@@ -547,16 +474,15 @@ export const studentService = {
         action_url: item.action_url,
       }))
 
-      localStorage.setItem('dudex_notifications', JSON.stringify(formatted))
+      cachedNotifications = formatted
       return formatted
     } catch {
-      return this.getNotifications()
+      return cachedNotifications
     }
   },
 
   markAllNotificationsRead(): NotificationItem[] {
-    const current = this.getNotifications().map((n) => ({ ...n, read: true }))
-    localStorage.setItem('dudex_notifications', JSON.stringify(current))
+    cachedNotifications = cachedNotifications.map((n) => ({ ...n, read: true }))
 
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
@@ -564,6 +490,6 @@ export const studentService = {
       }
     })
 
-    return current
+    return cachedNotifications
   },
 }

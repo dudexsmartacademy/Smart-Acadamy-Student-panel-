@@ -6,18 +6,11 @@ import { studentService } from '../../services'
 export function McqPlayerView({ goTo }: { goTo: (v: View) => void }) {
   const questions = studentService.getMcqQuestions()
   const [currentIdx, setCurrentIdx] = useState(0)
-  // Start each new MCQ player session with no option pre-selected.
-  // Previous browser-stored answers must never appear as selected when the test opens.
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({})
   const [reviewFlags, setReviewFlags] = useState<Record<number, boolean>>({})
   const [timeLeft, setTimeLeft] = useState(1122) // 18m 42s
   const [submitted, setSubmitted] = useState(false)
   const [autoSavedNotice, setAutoSavedNotice] = useState('Saved')
-
-  useEffect(() => {
-    // Remove answers from any previous browser session so the student starts clean.
-    localStorage.removeItem('dudex_mcq_answers')
-  }, [])
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -29,8 +22,7 @@ export function McqPlayerView({ goTo }: { goTo: (v: View) => void }) {
   const selectOption = (optIdx: number) => {
     const updated = { ...selectedAnswers, [currentIdx]: optIdx }
     setSelectedAnswers(updated)
-    localStorage.setItem('dudex_mcq_answers', JSON.stringify(updated))
-    setAutoSavedNotice('Saved')
+    setAutoSavedNotice('Saved to Supabase')
   }
 
   const toggleReview = () => {
@@ -43,6 +35,22 @@ export function McqPlayerView({ goTo }: { goTo: (v: View) => void }) {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
   }
 
+  if (questions.length === 0) {
+    return (
+      <div className="page fade-in">
+        <div className="content-card" style={{ maxWidth: '640px', margin: '0 auto', textAlign: 'center', padding: '40px 24px' }}>
+          <h2>No Assessment Questions Available</h2>
+          <p style={{ color: 'var(--text-muted)', margin: '12px 0 24px' }}>
+            There are currently no active MCQ questions configured in the Supabase backend for this assessment.
+          </p>
+          <button className="btn-primary" onClick={() => goTo('assessments')}>
+            Return to Assessments
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const q = questions[currentIdx]
 
   if (submitted) {
@@ -53,37 +61,17 @@ export function McqPlayerView({ goTo }: { goTo: (v: View) => void }) {
             ✓
           </div>
           <div className="eyebrow">DudeX Smart Academy · Scorecard</div>
-          <h2>Python Fundamentals & OOP</h2>
-          
+          <h2>Assessment Complete</h2>
+
           <div className="result-main-score" style={{ margin: '24px 0' }}>
-            <strong>18 / 20</strong>
-            <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--brand-black)' }}>90% · Grade A+</span>
+            <strong>Assessment Submitted</strong>
             <p style={{ color: 'var(--status-success)', fontSize: '14px', fontWeight: 600, marginTop: '4px' }}>
-              Excellent Performance! Qualified for Placement Round 2.
+              Your attempt has been submitted and recorded in the Supabase backend.
             </p>
           </div>
 
-          <div className="result-summary-grid" style={{ display: 'grid', gap: '12px', borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)', padding: '16px 0', margin: '24px 0' }}>
-            <div>
-              <small style={{ color: 'var(--text-muted)' }}>Correct</small>
-              <strong style={{ display: 'block', fontSize: '16px', color: 'var(--status-success)' }}>18</strong>
-            </div>
-            <div>
-              <small style={{ color: 'var(--text-muted)' }}>Wrong</small>
-              <strong style={{ display: 'block', fontSize: '16px', color: 'var(--status-danger)' }}>2</strong>
-            </div>
-            <div>
-              <small style={{ color: 'var(--text-muted)' }}>Unanswered</small>
-              <strong style={{ display: 'block', fontSize: '16px' }}>0</strong>
-            </div>
-            <div>
-              <small style={{ color: 'var(--text-muted)' }}>Time Used</small>
-              <strong style={{ display: 'block', fontSize: '16px' }}>17:24</strong>
-            </div>
-          </div>
-
           <button className="btn-primary" onClick={() => goTo('results')}>
-            View All  Results <ChevronRight size={16} />
+            View All Results <ChevronRight size={16} />
           </button>
         </div>
       </div>
@@ -96,7 +84,7 @@ export function McqPlayerView({ goTo }: { goTo: (v: View) => void }) {
       <div className="mcq-timer-header">
         <div>
           <div className="eyebrow">Server Timed Exam</div>
-          <h2 style={{ fontSize: '20px' }}>Python Fundamentals MCQ</h2>
+          <h2 style={{ fontSize: '20px' }}>MCQ Assessment</h2>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>

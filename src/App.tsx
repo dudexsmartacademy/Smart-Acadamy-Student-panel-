@@ -1,78 +1,62 @@
 import { useState, useEffect } from 'react'
 import './App.css'
-import type { View, RegistrationDetails, DailyNote, PortalNotification, AuthViewMode } from './types'
-import { studentService, defaultStudentProfile } from './services'
+import type { View, DailyNote, PortalNotification } from './types'
+import { studentService } from './services'
 import { navItems } from './data'
 import { StudentLayout } from './layouts'
 import { AppRoutes } from './routes'
 import { PublicApp } from './pages/auth'
+import { useAuth } from './context/AuthContext'
 
 export default function App() {
+  const {
+    authView,
+    setAuthView,
+    profile,
+    setProfile,
+    registrationDetails,
+    setRegistrationDetails,
+    logout,
+  } = useAuth()
+
   const [view, setView] = useState<View>('dashboard')
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [authView, setAuthView] = useState<AuthViewMode>('landing')
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false)
 
-  const [profile, setProfile] = useState(() => studentService.getProfile())
-  const [registrationDetails, setRegistrationDetails] = useState<RegistrationDetails>(() => {
-    const stored = localStorage.getItem('dudex_registration_details')
-    if (stored) {
-      try {
-        return JSON.parse(stored) as RegistrationDetails
-      } catch {
-        // Fall back to standard registration details
-      }
-    }
-
-    return {
-      full_name: defaultStudentProfile.full_name,
-      college_name: defaultStudentProfile.college,
-      college_email: defaultStudentProfile.college_email,
-      register_number: defaultStudentProfile.rrn,
-      phone_number: defaultStudentProfile.whatsapp,
-      course: 'B.E. / B.Tech',
-      specialization: defaultStudentProfile.specialization,
-      section: defaultStudentProfile.section,
-    }
-  })
-  const [selectedNote, setSelectedNote] = useState<DailyNote | null>(() => studentService.getDailyNotes()[0] || null)
+  const [selectedNote, setSelectedNote] = useState<DailyNote | null>(null)
   const [selectedAssessmentId, setSelectedAssessmentId] = useState<string>('')
-  const [notifications, setNotifications] = useState<PortalNotification[]>(() =>
-    studentService.getNotifications().map((n) => ({
-      notification_id: n.notification_id,
-      title: n.title,
-      message: n.message,
-      timestamp: n.timestamp,
-      read: n.read,
-    }))
-  )
+  const [notifications, setNotifications] = useState<PortalNotification[]>([])
   const unreadCount = notifications.filter((notification) => !notification.read).length
 
-  // Synchronize data with Supabase backend on mount
+  // Synchronize data with Supabase backend on mount & session changes
   useEffect(() => {
-    studentService.fetchProfileAsync().then(setProfile)
-    studentService.fetchNotificationsAsync().then((fetched) => {
-      setNotifications(
-        fetched.map((n) => ({
-          notification_id: n.notification_id,
-          title: n.title,
-          message: n.message,
-          timestamp: n.timestamp,
-          read: n.read,
-        }))
-      )
-    })
-    studentService.fetchDailyNotesAsync().then((notes) => {
-      if (notes.length > 0 && !selectedNote) {
-        setSelectedNote(notes[0])
-      }
-    })
-    studentService.fetchLiveClassesAsync()
-    studentService.fetchAssessmentsAsync()
-    studentService.fetchResultsAsync()
-    studentService.fetchAnnouncementsAsync()
-  }, [])
+    if (authView === 'portal') {
+      studentService.fetchProfileAsync().then((fetchedProfile) => {
+        if (fetchedProfile) setProfile(fetchedProfile)
+      })
+      studentService.fetchNotificationsAsync().then((fetched) => {
+        setNotifications(
+          fetched.map((n) => ({
+            notification_id: n.notification_id,
+            title: n.title,
+            message: n.message,
+            timestamp: n.timestamp,
+            read: n.read,
+          }))
+        )
+      })
+      studentService.fetchDailyNotesAsync().then((notes) => {
+        if (notes.length > 0) {
+          setSelectedNote(notes[0])
+        }
+      })
+      studentService.fetchLiveClassesAsync()
+      studentService.fetchAssessmentsAsync()
+      studentService.fetchResultsAsync()
+      studentService.fetchAnnouncementsAsync()
+    }
+  }, [authView])
 
   // Close the notification popup whenever the user clicks outside it.
   useEffect(() => {
@@ -136,7 +120,6 @@ export default function App() {
         }}
         onRegistrationSave={(details) => {
           setRegistrationDetails(details)
-          localStorage.setItem('dudex_registration_details', JSON.stringify(details))
         }}
       />
     )
@@ -179,7 +162,7 @@ export default function App() {
       onSignOutConfirm={() => {
         setSignOutConfirmOpen(false)
         setMobileOpen(false)
-        setAuthView('landing')
+        logout()
       }}
     >
       <AppRoutes
