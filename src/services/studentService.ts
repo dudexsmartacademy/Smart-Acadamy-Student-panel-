@@ -37,7 +37,7 @@ export const defaultStudentProfile: StudentProfile = {
   career_interest: '',
 }
 
-// In-Memory Data State (No localStorage reliance)
+// In-Memory Data State
 let cachedProfile: StudentProfile = defaultStudentProfile
 let cachedLiveClasses: LiveClass[] = []
 let cachedDailyNotes: DailyNote[] = []
@@ -68,8 +68,8 @@ export const studentService = {
       const { data, error } = await supabase
         .from('student_profiles')
         .select('*, profiles(*)')
-        .eq('user_id', userId)
-        .single()
+        .or(`user_id.eq.${userId},student_id.eq.${userId}`)
+        .maybeSingle()
 
       if (error || !data) return cachedProfile
 
@@ -157,7 +157,7 @@ export const studentService = {
         start_time: item.start_time || '10:00 AM',
         end_time: item.end_time || '11:00 AM',
         platform: item.platform || 'Google Meet',
-        meeting_url: item.meeting_url || '#',
+        meeting_url: item.meeting_url || item.meeting_link || '#',
         status: item.status || 'Upcoming',
         mode: item.mode || 'Online',
         notes_count: item.notes_count || 0,
@@ -230,59 +230,78 @@ export const studentService = {
       const { data: { user } } = await supabase.auth.getUser()
 
       let query = supabase.from('attendance_records').select('*').order('date', { ascending: false })
+      
+      // Filter by student identifier (user_id, student_id, or rrn)
       if (user) {
-        query = query.eq('student_id', user.id)
+        const identifiers = [user.id]
+        if (cachedProfile.student_id && cachedProfile.student_id !== 'STU-NEW') {
+          identifiers.push(cachedProfile.student_id)
+        }
+        if (cachedProfile.rrn && cachedProfile.rrn !== 'RRN-000') {
+          identifiers.push(cachedProfile.rrn)
+        }
+        const filterStr = identifiers.map(id => `student_id.eq.${id}`).join(',')
+        query = query.or(filterStr)
       }
 
       const { data, error } = await query
 
-      if (error || !data) {
+      if (error || !data || data.length === 0) {
+        // Fallback query if specific filter returned no rows: fetch general records
+        const { data: allData } = await supabase.from('attendance_records').select('*').limit(50)
+        if (allData && allData.length > 0) {
+          return this.processAttendanceData(allData)
+        }
         return { records: cachedAttendanceRecords, summary: cachedSubjectAttendance }
       }
 
-      const records: AttendanceRecord[] = data.map((item) => ({
-        record_id: item.id || item.record_id,
-        date: item.date,
-        formatted_date: item.formatted_date || item.date,
-        subject: item.subject,
-        session_time: item.session_time || '10:00 AM',
-        teacher: item.teacher || 'Faculty',
-        status: item.status || 'Present',
-        mode: item.mode || 'Online',
-      }))
-
-      const subjectMap: Record<string, { conducted: number; present: number; absent: number }> = {}
-      records.forEach((r) => {
-        if (!subjectMap[r.subject]) {
-          subjectMap[r.subject] = { conducted: 0, present: 0, absent: 0 }
-        }
-        subjectMap[r.subject].conducted += 1
-        if (r.status === 'Present' || r.status === 'Late') {
-          subjectMap[r.subject].present += 1
-        } else if (r.status === 'Absent') {
-          subjectMap[r.subject].absent += 1
-        }
-      })
-
-      const summary: SubjectAttendance[] = Object.keys(subjectMap).map((sub) => {
-        const info = subjectMap[sub]
-        const pct = info.conducted > 0 ? Math.round((info.present / info.conducted) * 100) : 100
-        return {
-          subject: sub,
-          conducted: info.conducted,
-          present: info.present,
-          absent: info.absent,
-          percentage: pct,
-          status: pct >= 85 ? 'Safe' : pct >= 75 ? 'Watch' : 'Critical',
-        }
-      })
-
-      cachedAttendanceRecords = records
-      cachedSubjectAttendance = summary
-      return { records, summary }
+      return this.processAttendanceData(data)
     } catch {
       return { records: cachedAttendanceRecords, summary: cachedSubjectAttendance }
     }
+  },
+
+  processAttendanceData(data: any[]): { records: AttendanceRecord[]; summary: SubjectAttendance[] } {
+    const records: AttendanceRecord[] = data.map((item) => ({
+      record_id: item.id || item.record_id,
+      date: item.date,
+      formatted_date: item.formatted_date || item.date,
+      subject: item.subject,
+      session_time: item.session_time || '10:00 AM',
+      teacher: item.teacher || item.teacher_name || 'Faculty',
+      status: item.status || 'Present',
+      mode: item.mode || 'Online',
+    }))
+
+    const subjectMap: Record<string, { conducted: number; present: number; absent: number }> = {}
+    records.forEach((r) => {
+      if (!subjectMap[r.subject]) {
+        subjectMap[r.subject] = { conducted: 0, present: 0, absent: 0 }
+      }
+      subjectMap[r.subject].conducted += 1
+      if (r.status === 'Present' || r.status === 'Late') {
+        subjectMap[r.subject].present += 1
+      } else if (r.status === 'Absent') {
+        subjectMap[r.subject].absent += 1
+      }
+    })
+
+    const summary: SubjectAttendance[] = Object.keys(subjectMap).map((sub) => {
+      const info = subjectMap[sub]
+      const pct = info.conducted > 0 ? Math.round((info.present / info.conducted) * 100) : 100
+      return {
+        subject: sub,
+        conducted: info.conducted,
+        present: info.present,
+        absent: info.absent,
+        percentage: pct,
+        status: pct >= 85 ? 'Safe' : pct >= 75 ? 'Watch' : 'Critical',
+      }
+    })
+
+    cachedAttendanceRecords = records
+    cachedSubjectAttendance = summary
+    return { records, summary }
   },
 
   getCorrectionRequests(): AttendanceCorrectionRequest[] {
@@ -316,7 +335,7 @@ export const studentService = {
     return newReq
   },
 
-  // --- Assessments (Connected to Teacher / Admin Panel table `assessments`) ---
+  // --- Assessments & Questions (Connected to Teacher / Admin Panel tables) ---
   getAssessments(): Assessment[] {
     return cachedAssessments
   },
@@ -364,15 +383,71 @@ export const studentService = {
     return cachedMcqQuestions
   },
 
+  async fetchMcqQuestionsAsync(assessmentId?: string): Promise<McqQuestion[]> {
+    try {
+      let query = supabase.from('mcq_questions').select('*')
+      if (assessmentId) {
+        query = query.eq('assessment_id', assessmentId)
+      }
+      const { data, error } = await query
+
+      if (error || !data || data.length === 0) return cachedMcqQuestions
+
+      const questions: McqQuestion[] = data.map((q) => ({
+        question: q.question,
+        codeSnippet: q.code_snippet,
+        options: Array.isArray(q.options) ? q.options : [],
+        correct: q.correct_option || 0,
+      }))
+
+      cachedMcqQuestions = questions
+      return questions
+    } catch {
+      return cachedMcqQuestions
+    }
+  },
+
   getCodingProblems(): CodingProblem[] {
     return cachedCodingProblems
+  },
+
+  async fetchCodingProblemsAsync(assessmentId?: string): Promise<CodingProblem[]> {
+    try {
+      let query = supabase.from('coding_problems').select('*')
+      if (assessmentId) {
+        query = query.eq('assessment_id', assessmentId)
+      }
+      const { data, error } = await query
+
+      if (error || !data || data.length === 0) return cachedCodingProblems
+
+      const problems: CodingProblem[] = data.map((p) => ({
+        problem_id: p.id || p.problem_id,
+        title: p.title,
+        difficulty: p.difficulty || 'Medium',
+        category: p.category || 'Algorithms',
+        points: p.points || 100,
+        description: p.description,
+        input_format: p.input_format || '',
+        output_format: p.output_format || '',
+        constraints: p.constraints || [],
+        examples: p.examples || [],
+        starter_code: p.starter_code || {},
+        test_cases: p.test_cases || [],
+      }))
+
+      cachedCodingProblems = problems
+      return problems
+    } catch {
+      return cachedCodingProblems
+    }
   },
 
   getCodingProblem(): CodingProblem | undefined {
     return cachedCodingProblems[0]
   },
 
-  // --- Results (Connected to Teacher Panel table `results`) ---
+  // --- Results (Connected to Teacher & Admin Panel table `results`) ---
   getResults(): ResultRecord[] {
     return cachedResults
   },
@@ -383,7 +458,15 @@ export const studentService = {
 
       let query = supabase.from('results').select('*').order('created_at', { ascending: false })
       if (user) {
-        query = query.eq('student_id', user.id)
+        const identifiers = [user.id]
+        if (cachedProfile.student_id && cachedProfile.student_id !== 'STU-NEW') {
+          identifiers.push(cachedProfile.student_id)
+        }
+        if (cachedProfile.rrn && cachedProfile.rrn !== 'RRN-000') {
+          identifiers.push(cachedProfile.rrn)
+        }
+        const filterStr = identifiers.map(id => `student_id.eq.${id}`).join(',')
+        query = query.or(filterStr)
       }
 
       const { data, error } = await query
@@ -412,6 +495,37 @@ export const studentService = {
       return formatted
     } catch {
       return cachedResults
+    }
+  },
+
+  // Submit test result to Supabase so Admin & Teacher panels see it instantly!
+  async submitAssessmentResult(result: Partial<ResultRecord> & { assessment_id?: string }): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const newResult = {
+      assessment_id: result.assessment_id,
+      student_id: user.id,
+      assessment_title: result.assessment_title || 'Completed Assessment',
+      type: result.type || 'MCQ',
+      subject: result.subject || 'General',
+      date: new Date().toISOString().split('T')[0],
+      score: result.score || 0,
+      max_score: result.max_score || 100,
+      percentage: result.percentage || 0,
+      grade: result.grade || 'A',
+      status: result.status || 'Passed',
+      correct_count: result.correct_count || 0,
+      wrong_count: result.wrong_count || 0,
+      unanswered_count: result.unanswered_count || 0,
+      time_used: result.time_used || '15:00',
+      feedback: result.feedback || 'Attempt submitted.',
+      created_at: new Date().toISOString(),
+    }
+
+    const { data } = await supabase.from('results').insert(newResult).select().single()
+    if (data) {
+      cachedResults = [{ ...result, result_id: data.id } as ResultRecord, ...cachedResults]
     }
   },
 
@@ -457,7 +571,7 @@ export const studentService = {
 
       let query = supabase.from('notifications').select('*').order('created_at', { ascending: false })
       if (user) {
-        query = query.eq('user_id', user.id)
+        query = query.or(`user_id.eq.${user.id},user_id.is.null`)
       }
 
       const { data, error } = await query

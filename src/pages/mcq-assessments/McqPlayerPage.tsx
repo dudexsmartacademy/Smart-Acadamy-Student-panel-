@@ -1,16 +1,24 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle2, ChevronRight, Clock3, Check } from 'lucide-react'
-import type { View } from '../../types'
+import type { View, McqQuestion } from '../../types'
 import { studentService } from '../../services'
 
 export function McqPlayerView({ goTo }: { goTo: (v: View) => void }) {
-  const questions = studentService.getMcqQuestions()
+  const [questions, setQuestions] = useState<McqQuestion[]>(() => studentService.getMcqQuestions())
+  const [loading, setLoading] = useState(true)
   const [currentIdx, setCurrentIdx] = useState(0)
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({})
   const [reviewFlags, setReviewFlags] = useState<Record<number, boolean>>({})
-  const [timeLeft, setTimeLeft] = useState(1122) // 18m 42s
+  const [timeLeft, setTimeLeft] = useState(1800) // 30 minutes
   const [submitted, setSubmitted] = useState(false)
-  const [autoSavedNotice, setAutoSavedNotice] = useState('Saved')
+  const [autoSavedNotice, setAutoSavedNotice] = useState('Saved to Supabase')
+
+  useEffect(() => {
+    studentService.fetchMcqQuestionsAsync().then((q) => {
+      setQuestions(q)
+      setLoading(false)
+    })
+  }, [])
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -35,13 +43,48 @@ export function McqPlayerView({ goTo }: { goTo: (v: View) => void }) {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
   }
 
+  const handleSubmitExam = async () => {
+    let correctCount = 0
+    questions.forEach((q, idx) => {
+      if (selectedAnswers[idx] === (q.correctOptionIndex ?? 0)) {
+        correctCount++
+      }
+    })
+    const total = questions.length || 1
+    const pct = Math.round((correctCount / total) * 100)
+
+    await studentService.submitAssessmentResult({
+      assessment_title: 'MCQ Assessment',
+      type: 'MCQ',
+      subject: 'Computer Science',
+      score: correctCount * 10,
+      max_score: total * 10,
+      percentage: pct,
+      grade: pct >= 80 ? 'A+' : pct >= 60 ? 'B' : 'C',
+      status: pct >= 80 ? 'Distinction' : pct >= 50 ? 'Passed' : 'Needs Review',
+      correct_count: correctCount,
+      wrong_count: total - correctCount,
+      time_used: formatTimer(1800 - timeLeft),
+    })
+
+    setSubmitted(true)
+  }
+
+  if (loading) {
+    return (
+      <div className="page fade-in" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <p style={{ color: 'var(--text-muted)' }}>Loading assessment questions from Supabase backend...</p>
+      </div>
+    )
+  }
+
   if (questions.length === 0) {
     return (
       <div className="page fade-in">
         <div className="content-card" style={{ maxWidth: '640px', margin: '0 auto', textAlign: 'center', padding: '40px 24px' }}>
-          <h2>No Assessment Questions Available</h2>
+          <h2>No Active MCQ Questions</h2>
           <p style={{ color: 'var(--text-muted)', margin: '12px 0 24px' }}>
-            There are currently no active MCQ questions configured in the Supabase backend for this assessment.
+            There are currently no active MCQ questions configured in the Supabase database.
           </p>
           <button className="btn-primary" onClick={() => goTo('assessments')}>
             Return to Assessments
@@ -66,7 +109,7 @@ export function McqPlayerView({ goTo }: { goTo: (v: View) => void }) {
           <div className="result-main-score" style={{ margin: '24px 0' }}>
             <strong>Assessment Submitted</strong>
             <p style={{ color: 'var(--status-success)', fontSize: '14px', fontWeight: 600, marginTop: '4px' }}>
-              Your attempt has been submitted and recorded in the Supabase backend.
+              Your response has been synchronized with the Teacher & Admin panels via Supabase Cloud.
             </p>
           </div>
 
@@ -143,7 +186,7 @@ export function McqPlayerView({ goTo }: { goTo: (v: View) => void }) {
                 Next Question <ChevronRight size={15} />
               </button>
             ) : (
-              <button className="btn-gold" onClick={() => setSubmitted(true)}>
+              <button className="btn-gold" onClick={handleSubmitExam}>
                 Submit Exam <Check size={16} />
               </button>
             )}

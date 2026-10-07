@@ -149,6 +149,8 @@ export interface CodingProblem {
   problem_id: string
   title: string
   difficulty: 'Easy' | 'Medium' | 'Hard'
+  category?: string
+  points?: number
   description: string
   input_format: string
   output_format: string
