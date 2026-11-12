@@ -314,10 +314,10 @@ export function PublicApp({
   const [collegesList, setCollegesList] = useState<string[]>(getCollegesList())
 
   useEffect(() => {
-    fetchColleges().then(() => {
+    fetchColleges(mode === 'signup').then(() => {
       setCollegesList(getCollegesList())
     })
-  }, [])
+  }, [mode])
 
   // collegesList is in the deps so options refresh once the college data has
   // loaded (the college can be pre-filled from the roster before that).
@@ -968,6 +968,8 @@ export function PublicApp({
                   console.error('Could not load the verified student profile:', error)
                 }
 
+                await fetchColleges(true)
+                setCollegesList(getCollegesList())
                 setVerificationLoading(false)
                 setRegistrationError('')
                 setMode('signup')

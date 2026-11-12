@@ -72,6 +72,12 @@ export async function fetchColleges(force = false): Promise<AcademicCollege[]> {
       }
     } catch {
       cachedColleges = []
+    } finally {
+      // Do not permanently cache an empty result (for example, when fetched
+      // before OTP authentication while RLS hides rows from anon users).
+      if (cachedColleges.length === 0) {
+        fetchPromise = null
+      }
     }
 
     return cachedColleges
