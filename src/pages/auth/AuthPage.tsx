@@ -1281,10 +1281,19 @@ export function PublicApp({
               style={{ width: '100%', marginTop: 14 }}
               onClick={async () => {
                 setAuthNotice('')
-                await supabase.auth.signInWithOAuth({
+                const isLocal =
+                  window.location.hostname === 'localhost' ||
+                  window.location.hostname === '127.0.0.1'
+                const redirectOrigin =
+                  import.meta.env.VITE_SITE_URL ||
+                  (isLocal ? window.location.origin : 'https://student.dudexsmartacademy.in')
+                const { error } = await supabase.auth.signInWithOAuth({
                   provider: 'google',
-                  options: { redirectTo: window.location.origin },
+                  options: { redirectTo: redirectOrigin },
                 })
+                if (error) {
+                  setLoginError(error.message)
+                }
               }}
             >
               <svg
@@ -1849,9 +1858,15 @@ export function PublicApp({
                 event.preventDefault()
                 if (!resetEmail.trim()) return
                 setResetLoading(true)
+                const isLocal =
+                  window.location.hostname === 'localhost' ||
+                  window.location.hostname === '127.0.0.1'
+                const redirectOrigin =
+                  import.meta.env.VITE_SITE_URL ||
+                  (isLocal ? window.location.origin : 'https://student.dudexsmartacademy.in')
                 const { error } = await supabase.auth.resetPasswordForEmail(
                   resetEmail.trim(),
-                  { redirectTo: `${window.location.origin}/reset-password` },
+                  { redirectTo: `${redirectOrigin}/reset-password` },
                 )
                 setResetLoading(false)
                 if (error) {
