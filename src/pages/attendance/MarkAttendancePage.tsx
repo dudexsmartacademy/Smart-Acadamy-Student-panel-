@@ -74,7 +74,8 @@ export function MarkAttendancePage(_props: MarkAttendancePageProps) {
           .maybeSingle()
 
         const studentBatch = sp?.batch_name || (codeRow.batches && codeRow.batches[0]) || 'Batch 1'
-        const todayStr = new Date().toISOString().split('T')[0]
+        const now = new Date()
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
         // Check if already marked for today
         const { data: existingRecs } = await supabase

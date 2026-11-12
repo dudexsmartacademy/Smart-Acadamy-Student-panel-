@@ -1,10 +1,32 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CheckCircle2 } from 'lucide-react'
 import { studentService } from '../../services'
+import { syncStudentData } from '../../services/studentService'
+import { supabase } from '../../lib/supabase'
 import { AttendanceSubjectSelect } from './AttendanceSubjectSelect'
 
 export function AttendanceView() {
   const [selectedTeacher, setSelectedTeacher] = useState('')
+  const [, setRefreshTick] = useState(0)
+
+  useEffect(() => {
+    void syncStudentData().then(() => setRefreshTick((t) => t + 1))
+
+    const channel = supabase
+      .channel('student-attendance-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'attendance_records' },
+        () => {
+          void syncStudentData().then(() => setRefreshTick((t) => t + 1))
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [])
 
   const teacherAttendance = studentService.getTeacherAttendance()
   const records = studentService.getAttendanceRecords()
@@ -21,7 +43,7 @@ export function AttendanceView() {
     ? records.filter((record) => record.teacher === selectedTeacher)
     : records
 
-  const teacherOptions = Array.from(new Set(records.map((r) => r.teacher || 'vegeta'))).filter(Boolean)
+  const teacherOptions = Array.from(new Set(records.map((r) => r.teacher || 'Faculty Member'))).filter(Boolean)
 
   return (
     <div className="page fade-in">
@@ -152,7 +174,6 @@ export function AttendanceView() {
                 <tr>
                   <th>Date</th>
                   <th>Faculty</th>
-                  <th>Subject</th>
                   <th>Mode</th>
                   <th>Status</th>
                 </tr>
@@ -161,8 +182,7 @@ export function AttendanceView() {
                 {filteredRecords.map((r) => (
                   <tr key={r.record_id}>
                     <td><strong>{r.formatted_date}</strong></td>
-                    <td>{r.teacher || 'vegeta'}</td>
-                    <td>{r.subject}</td>
+                    <td>{r.teacher || 'Faculty Member'}</td>
                     <td>{r.mode}</td>
                     <td>
                       <span

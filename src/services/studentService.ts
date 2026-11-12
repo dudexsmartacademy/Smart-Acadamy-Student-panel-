@@ -171,7 +171,7 @@ async function loadAttendance(userId: string): Promise<void> {
       const rawStatus = String(row.status || '').charAt(0).toUpperCase() + String(row.status || '').slice(1).toLowerCase()
       const resolvedTeacher = (row.teacher_name && String(row.teacher_name).trim())
         ? String(row.teacher_name).trim()
-        : (row.teacher_id ? teacherNameMap.get(row.teacher_id) : null) || 'vegeta'
+        : (row.teacher_id ? teacherNameMap.get(row.teacher_id) : null) || 'Faculty Member'
       return {
         record_id: row.id,
         date: sessionDate,
@@ -212,7 +212,7 @@ async function loadAttendance(userId: string): Promise<void> {
 
   const byTeacher = new Map<string, { conducted: number; present: number; absent: number }>()
   for (const r of initialAttendanceRecords) {
-    const key = r.teacher || 'vegeta'
+    const key = r.teacher || 'Faculty Member'
     const s = byTeacher.get(key) || { conducted: 0, present: 0, absent: 0 }
     s.conducted += 1
     if (r.status === 'Present' || r.status === 'Late' || r.status === 'Excused') s.present += 1
