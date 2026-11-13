@@ -10,6 +10,11 @@ interface MarkAttendancePageProps {
 
 // The signed-in student is identified server-side by mark_attendance_with_code,
 // so the profile prop is not needed to record attendance.
+const getLocalDateString = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export function MarkAttendancePage(_props: MarkAttendancePageProps) {
   const [code, setCode] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -31,23 +36,24 @@ export function MarkAttendancePage(_props: MarkAttendancePageProps) {
 
     setSubmitting(true)
     try {
-      // 1. Try server-side RPC if available
-      let markedViaRpc = false
+      // 1. Try server-side RPC
       const cleanCode = code.trim().toUpperCase()
-      try {
-        const { error: markError } = await supabase.rpc('mark_attendance_with_code', {
-          p_code: cleanCode,
-        })
-        if (!markError) {
-          markedViaRpc = true
-        }
-      } catch {}
-
-      if (markedViaRpc) {
+      const { data: rpcData, error: markError } = await supabase.rpc('mark_attendance_with_code', {
+        p_code: cleanCode,
+      })
+      if (!markError && rpcData) {
         setSubmitted(true)
         setCode('')
         void syncStudentData()
         return
+      }
+
+      if (markError) {
+        const msg = markError.message || ''
+        if (msg.includes('not for your batch') || msg.includes('not enrolled') || msg.includes('expired') || msg.includes('Invalid')) {
+          setError(msg)
+          return
+        }
       }
 
       // 2. Direct fallback: resolve active attendance code from attendance_codes table
@@ -74,8 +80,7 @@ export function MarkAttendancePage(_props: MarkAttendancePageProps) {
           .maybeSingle()
 
         const studentBatch = sp?.batch_name || (codeRow.batches && codeRow.batches[0]) || 'Batch 1'
-        const now = new Date()
-        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+        const todayStr = getLocalDateString()
 
         // Check if already marked for today
         const { data: existingRecs } = await supabase
@@ -117,7 +122,7 @@ export function MarkAttendancePage(_props: MarkAttendancePageProps) {
       }
 
       // 3. Fallback: resolve active class session by code in room field
-      const todayStr = new Date().toISOString().split('T')[0]
+      const todayStr = getLocalDateString()
       const { data: activeSessions, error: sessError } = await supabase
         .from('class_sessions')
         .select('id, class_id, teacher_id, room, session_date')
@@ -145,23 +150,16 @@ export function MarkAttendancePage(_props: MarkAttendancePageProps) {
         return
       }
 
-      // Resolve student profile id
-      const { data: sp } = await supabase
-        .from('student_profiles')
-        .select('id')
-        .eq('user_id', authResult.user.id)
-        .maybeSingle()
+      const studentId = authResult.user.id
 
-      const studentId = sp?.id || authResult.user.id
-
-      // Upsert into attendance_records
+      // Upsert into attendance_records with title-cased Present
       const { error: insertErr } = await supabase
         .from('attendance_records')
         .upsert(
           {
             session_id: session.id,
             student_id: studentId,
-            status: 'present',
+            status: 'Present',
             marked_by: session.teacher_id,
             marked_at: new Date().toISOString(),
             remarks: 'Verified via live attendance code',
@@ -176,9 +174,10 @@ export function MarkAttendancePage(_props: MarkAttendancePageProps) {
           .insert({
             class_id: session.class_id,
             student_id: studentId,
-            status: 'present',
+            status: 'Present',
             date: todayStr,
             teacher_id: session.teacher_id,
+            subject: 'General',
           })
       }
 

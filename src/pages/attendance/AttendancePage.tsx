@@ -1,32 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { CheckCircle2 } from 'lucide-react'
 import { studentService } from '../../services'
-import { syncStudentData } from '../../services/studentService'
-import { supabase } from '../../lib/supabase'
 import { AttendanceSubjectSelect } from './AttendanceSubjectSelect'
 
 export function AttendanceView() {
   const [selectedTeacher, setSelectedTeacher] = useState('')
-  const [, setRefreshTick] = useState(0)
-
-  useEffect(() => {
-    void syncStudentData().then(() => setRefreshTick((t) => t + 1))
-
-    const channel = supabase
-      .channel('student-attendance-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'attendance_records' },
-        () => {
-          void syncStudentData().then(() => setRefreshTick((t) => t + 1))
-        }
-      )
-      .subscribe()
-
-    return () => {
-      void supabase.removeChannel(channel)
-    }
-  }, [])
 
   const teacherAttendance = studentService.getTeacherAttendance()
   const records = studentService.getAttendanceRecords()
