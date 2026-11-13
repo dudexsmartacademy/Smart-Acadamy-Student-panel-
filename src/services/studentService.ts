@@ -169,9 +169,12 @@ async function loadAttendance(userId: string): Promise<void> {
     initialAttendanceRecords = liveData.map((row: any) => {
       const sessionDate = row.date || (row.created_at ? row.created_at.split('T')[0] : '')
       const rawStatus = String(row.status || '').charAt(0).toUpperCase() + String(row.status || '').slice(1).toLowerCase()
-      const resolvedTeacher = (row.teacher_name && String(row.teacher_name).trim())
+      let resolvedTeacher = (row.teacher_name && String(row.teacher_name).trim())
         ? String(row.teacher_name).trim()
-        : (row.teacher_id ? teacherNameMap.get(row.teacher_id) : null) || 'Faculty Member'
+        : (row.teacher_id ? teacherNameMap.get(row.teacher_id) : null) || 'Administrator'
+      if (resolvedTeacher.toLowerCase().includes('dudex') || resolvedTeacher.toLowerCase().includes('academy lead')) {
+        resolvedTeacher = 'Administrator'
+      }
       return {
         record_id: row.id,
         date: sessionDate,

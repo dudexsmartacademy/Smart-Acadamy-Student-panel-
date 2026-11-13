@@ -152,7 +152,6 @@ export function AttendanceView() {
                 <tr>
                   <th>Date</th>
                   <th>Faculty</th>
-                  <th>Mode</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -161,7 +160,6 @@ export function AttendanceView() {
                   <tr key={r.record_id}>
                     <td><strong>{r.formatted_date}</strong></td>
                     <td>{r.teacher || 'Faculty Member'}</td>
-                    <td>{r.mode}</td>
                     <td>
                       <span
                         className={`badge-status ${
